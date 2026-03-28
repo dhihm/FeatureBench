@@ -70,6 +70,14 @@ class BaseAgent(ABC):
         """
         pass
     
+    def get_extra_volumes(self) -> Dict[str, Dict[str, str]]:
+        """Return additional host volumes to mount into the container.
+
+        Override in subclasses to inject agent-specific mounts.
+        Returns a dict of ``{host_path: {"bind": container_path, "mode": "ro"|"rw"}}``.
+        """
+        return {}
+
     def get_env_setup_script(self) -> str:
         """
         Get the environment setup script content.

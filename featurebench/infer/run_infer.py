@@ -581,39 +581,7 @@ class InferenceRunner:
             container_name = f"fb-infer-{task_id.replace('/', '-').replace('.', '-')}-attempt-{attempt}-{container_timestamp}"
             task_logger.info(f"Creating container {container_name}...")
 
-            # Mount cache volume
-            volumes = None
-            if self.cache_dir:
-                try:
-                    self.cache_dir.mkdir(parents=True, exist_ok=True)
-                except Exception:
-                    pass
-                # Bind host cache directory to /download inside container
-                volumes = {str(self.cache_dir): {"bind": "/download", "mode": "rw"}}
-            
-            container = cm.create_container(
-                image_name=image_name,
-                container_name=container_name,
-                working_dir="/testbed",
-                proxy_port=self.config.proxy_port,
-                gpu_ids=task_gpu_ids,
-                docker_runtime_config=docker_runtime_config,
-                volumes=volumes
-            )
-            
-            # Initialize runtime with task-specific logger
-            runtime_handler = RuntimeHandler(cm, task_logger)
-            
-            if not runtime_handler.initialize_runtime(
-                container,
-                instance,
-                log_file,
-                white_box=getattr(self.config, "white_box", False),
-            ):
-                result.error = "Runtime initialization failed"
-                return result
-            
-            # Create and install agent with task-specific logger
+            # Create agent early so we can query extra volumes
             agent = get_agent(
                 self.config.agent,
                 container_manager=cm,
@@ -622,6 +590,38 @@ class InferenceRunner:
                 model=self.config.model,
                 version=self.config.version,
             )
+
+            # Mount cache volume + agent-specific volumes
+            volumes: dict = {}
+            if self.cache_dir:
+                try:
+                    self.cache_dir.mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
+                volumes[str(self.cache_dir)] = {"bind": "/download", "mode": "rw"}
+            volumes.update(agent.get_extra_volumes())
+
+            container = cm.create_container(
+                image_name=image_name,
+                container_name=container_name,
+                working_dir="/testbed",
+                proxy_port=self.config.proxy_port,
+                gpu_ids=task_gpu_ids,
+                docker_runtime_config=docker_runtime_config,
+                volumes=volumes or None
+            )
+
+            # Initialize runtime with task-specific logger
+            runtime_handler = RuntimeHandler(cm, task_logger)
+
+            if not runtime_handler.initialize_runtime(
+                container,
+                instance,
+                log_file,
+                white_box=getattr(self.config, "white_box", False),
+            ):
+                result.error = "Runtime initialization failed"
+                return result
             
             if not agent.install(container, log_file):
                 result.error = "Agent installation failed"
@@ -714,13 +714,23 @@ class InferenceRunner:
             cm = ContainerManager(task_logger, self.agent_env_vars)
             cm.pull_image(image_name)
 
-            volumes = None
+            agent = get_agent(
+                self.config.agent,
+                container_manager=cm,
+                env_vars=self.agent_env_vars,
+                logger=task_logger,
+                model=self.config.model,
+                version=self.config.version,
+            )
+
+            volumes: dict = {}
             if self.cache_dir:
                 try:
                     self.cache_dir.mkdir(parents=True, exist_ok=True)
                 except Exception:
                     pass
-                volumes = {str(self.cache_dir): {"bind": "/download", "mode": "rw"}}
+                volumes[str(self.cache_dir)] = {"bind": "/download", "mode": "rw"}
+            volumes.update(agent.get_extra_volumes())
 
             docker_runtime_config = instance.get_docker_runtime_config()
             task_gpu_ids = self.config.gpu_ids
@@ -741,16 +751,7 @@ class InferenceRunner:
                 proxy_port=self.config.proxy_port,
                 gpu_ids=task_gpu_ids,
                 docker_runtime_config=docker_runtime_config,
-                volumes=volumes
-            )
-
-            agent = get_agent(
-                self.config.agent,
-                container_manager=cm,
-                env_vars=self.agent_env_vars,
-                logger=task_logger,
-                model=self.config.model,
-                version=self.config.version,
+                volumes=volumes or None
             )
 
             agent.install(container, warmup_log)
@@ -1105,6 +1106,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         choices=[
+            "axon",
             "claude_code",
             "gemini_cli",
             "openhands",

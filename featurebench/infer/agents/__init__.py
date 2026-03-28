@@ -2,6 +2,7 @@
 Agent implementations for FeatureBench inference.
 """
 
+from featurebench.infer.agents.axon import AxonAgent
 from featurebench.infer.agents.base import BaseAgent
 from featurebench.infer.agents.codex import CodexAgent
 from featurebench.infer.agents.claude_code import ClaudeCodeAgent
@@ -10,6 +11,7 @@ from featurebench.infer.agents.mini_swe_agent import MiniSweAgent
 from featurebench.infer.agents.openhands import OpenHandsAgent
 
 __all__ = [
+    "AxonAgent",
     "BaseAgent",
     "CodexAgent",
     "ClaudeCodeAgent",
@@ -22,15 +24,16 @@ __all__ = [
 def get_agent(agent_name: str, **kwargs) -> BaseAgent:
     """
     Get an agent by name.
-    
+
     Args:
         agent_name: Name of the agent (claude_code, openhands)
         **kwargs: Additional arguments for the agent
-        
+
     Returns:
         Agent instance
     """
     agents = {
+        "axon": AxonAgent,
         "codex": CodexAgent,
         "claude_code": ClaudeCodeAgent,
         "gemini_cli": GeminiCliAgent,
