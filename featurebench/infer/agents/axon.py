@@ -171,12 +171,11 @@ class AxonAgent(BaseAgent):
             with open(axon_log, "w", encoding="utf-8") as f:
                 f.write(f"Issue: {json.dumps(issue, indent=2)}\n\n")
 
-            # 3. Start run (skip_recall to avoid cross-project memory pollution)
+            # 3. Start run
             run_resp = self._api("/rpc/StartRun", {
                 "issue_id": issue_id,
                 "cwd": str(testbed),
                 "model": model,
-                "skip_recall": True,
             })
             run_id = run_resp["id"]
             self.logger.info(f"Started run: {run_id}")
